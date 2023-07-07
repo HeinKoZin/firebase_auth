@@ -72,6 +72,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String _idToken = '';
 
+// TODO: Login With Google
   Future<void> loginWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
@@ -90,7 +91,7 @@ class _MyHomePageState extends State<MyHomePage> {
         print('Id Token: $googleUser');
         setState(() {
           // Redirect to home
-          _idToken = googleUser.toString();
+          _idToken = googleAuth.idToken.toString();
         });
       }
     } catch (error) {
