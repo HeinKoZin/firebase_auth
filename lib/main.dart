@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:firebase_auth/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +21,24 @@ const List<String> scopes = <String>[
   'email',
   'https://www.googleapis.com/auth/contacts.readonly',
 ];
+
+String generateUniqueUsername(String name) {
+  // Remove spaces and convert to lowercase
+  String username = name.replaceAll(' ', '').toLowerCase();
+
+  // Generate a random number
+  Random random = Random();
+  int randomNumber = random.nextInt(9999);
+
+  // Get the current timestamp
+  DateTime now = DateTime.now();
+  String timestamp = now.millisecondsSinceEpoch.toString();
+
+  // Combine username, timestamp, and random number
+  String uniqueUsername = '$username$timestamp$randomNumber';
+
+  return uniqueUsername;
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -51,6 +72,38 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class UserInfo {
+  final String username;
+  final String firstName;
+  final String lastName;
+
+  UserInfo(this.username, this.firstName, this.lastName);
+
+  UserInfo.fromJson(Map<String, dynamic> json)
+      : username = json['username'],
+        firstName = json['first_name'],
+        lastName = json['last_name'];
+
+  Map<String, dynamic> toJson() => {
+        'username': username,
+        'first_name': firstName,
+        'last_name': lastName,
+      };
+}
+
+class UserToken {
+  final String accessToken;
+  final String idToken;
+
+  UserToken(this.accessToken, this.idToken);
+
+  // Map<String, dynamic> toJson() => {
+  //       'username': username,
+  //       'first_name': firstName,
+  //       'last_name': lastName,
+  //     };
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
 
@@ -70,7 +123,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String _idToken = '';
+  final String _idToken = '';
 
 // TODO: Login With Google
   Future<void> loginWithGoogle() async {
@@ -84,20 +137,38 @@ class _MyHomePageState extends State<MyHomePage> {
         // Use the access token and ID token from googleAuth to authenticate the user with your backend or perform other operations
         final String accessToken = googleAuth.accessToken ?? '';
         final String idToken = googleAuth.idToken ?? '';
+        List<String> nameParts = googleUser.displayName!.split(' ');
 
         // ...
 
         print('Access Token: $accessToken');
         print('Id Token: $googleUser');
-        setState(() {
-          // Redirect to home
-          _idToken = googleAuth.idToken.toString();
-        });
+        // setState(() {
+        //   // Redirect to home
+        //   _idToken = googleAuth.idToken.toString();
+        // });
+        registerAndLink(
+            UserInfo(generateUniqueUsername(googleUser.displayName!),
+                nameParts[0], nameParts[nameParts.length - 1]),
+            UserToken(accessToken, idToken));
       }
     } catch (error) {
       // Handle any errors that occur during the login process
       print('Error: $error');
     }
+  }
+
+  // TODO: Register and Link user with Google Acccount
+  Future<void> registerAndLink(UserInfo user, UserToken token) async {
+    final url = Uri.parse(
+        "https://listartest.dreamhosters.com/wp-json/nextend-social-login/v1/google/get_user?access_token={ 'access_token': ${token.accessToken}, 'expires_in': 3599, 'token_type': 'Bearer', 'id_token': ${token.idToken}}");
+
+    final response = await http.post(
+      url,
+      body: user.toJson(),
+    );
+
+    // TODO: Store token in Local DB and then redirect user to home
   }
 
   @override
