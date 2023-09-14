@@ -1,10 +1,15 @@
+import 'dart:convert';
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_options.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth_demo/screens/verify_otp.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +20,7 @@ void main() async {
 }
 
 final googleSignIn = GoogleSignIn();
+FirebaseAuth auth = FirebaseAuth.instance;
 
 /// The scopes required by this application.
 const List<String> scopes = <String>[
@@ -67,7 +73,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const VerifyOTP(),
     );
   }
 }
@@ -124,6 +130,34 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final String _idToken = '';
+  TextEditingController codeController = TextEditingController();
+  late String _verificationId;
+
+  Future<void> _loginFB() async {
+    final LoginResult result = await FacebookAuth.instance
+        .login(); // by default we request the email and the public profile
+
+    // loginBehavior is only supported for Android devices, for ios it will be ignored
+    // final result = await FacebookAuth.instance.login(
+    //   permissions: ['email', 'public_profile', 'user_birthday', 'user_friends', 'user_gender', 'user_link'],
+    //   loginBehavior: LoginBehavior
+    //       .DIALOG_ONLY, // (only android) show an authentication dialog instead of redirecting to facebook app
+    // );
+
+    if (result.status == LoginStatus.success) {
+      result.accessToken;
+
+      // get the user data
+      // by default we get the userId, email,name and picture
+      final userData = await FacebookAuth.instance.getUserData();
+
+      print(userData);
+      // final userData = await FacebookAuth.instance.getUserData(fields: "email,birthday,friends,gender,link");
+    } else {
+      print(result.status);
+      print(result.message);
+    }
+  }
 
 // TODO: Login With Google
   Future<void> loginWithGoogle() async {
@@ -160,15 +194,65 @@ class _MyHomePageState extends State<MyHomePage> {
 
   // TODO: Register and Link user with Google Acccount
   Future<void> registerAndLink(UserInfo user, UserToken token) async {
+    final data = {
+      'access_token': token.accessToken,
+      'expires_in': 3599,
+      'token_type': 'Bearer',
+      'id_token': token.idToken
+    };
+
     final url = Uri.parse(
-        "https://listartest.dreamhosters.com/wp-json/nextend-social-login/v1/google/get_user?access_token={ 'access_token': ${token.accessToken}, 'expires_in': 3599, 'token_type': 'Bearer', 'id_token': ${token.idToken}}");
+        "https://listartest.dreamhosters.com/wp-json/nextend-social-login/v1/google/get_user?access_token=${jsonEncode(data)}");
 
     final response = await http.post(
       url,
       body: user.toJson(),
     );
 
+    print(response.body);
+
     // TODO: Store token in Local DB and then redirect user to home
+  }
+
+  Future<void> loginWithPhone() async {
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: '+959950668891',
+      verificationCompleted: (PhoneAuthCredential credential) {
+        print("Credentials: $credential");
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        print("Fail: $e");
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        print("CodeSent: $verificationId and $resendToken");
+
+        setState(() {
+          _verificationId = verificationId;
+        });
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        print("CodeAuto: $verificationId");
+      },
+    );
+  }
+
+  Future<void> verify() async {
+    print(_verificationId);
+
+    PhoneAuthCredential credential = PhoneAuthProvider.credential(
+      verificationId: _verificationId,
+      smsCode: codeController.text,
+    );
+
+    // // Sign in the user with the credential
+    var test = auth.signInWithCredential(credential);
+    // // Wait for the user to complete the reCAPTCHA & for an SMS code to be sent.
+    // // ConfirmationResult confirmationResult =
+    // //     await auth.signInWithPhoneNumber('+959785383986');
+    // // UserCredential userCredential = await confirmationResult.confirm('123456');
+    print("Credentials: $test");
+
+    test.then((value) => {print("Value: $value")});
   }
 
   @override
@@ -190,6 +274,7 @@ class _MyHomePageState extends State<MyHomePage> {
             SelectableText(_idToken),
             ElevatedButton.icon(
               onPressed: () {
+                _loginFB();
                 // Handle Facebook login button pressed
                 // Call your login function for Facebook
               },
@@ -206,6 +291,32 @@ class _MyHomePageState extends State<MyHomePage> {
               icon: const Icon(Icons.login),
               label: const Text('Login with Google'),
             ),
+            Container(
+              height: 16,
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Handle Google login button pressed
+                // Call your login function for Google
+                loginWithPhone();
+              },
+              icon: const Icon(Icons.login),
+              label: const Text('Login with SMS'),
+            ),
+            TextField(
+              controller: codeController,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                labelText: 'Enter Name',
+                hintText: 'Enter Your Name',
+              ),
+            ),
+            IconButton(
+              onPressed: () {
+                verify();
+              },
+              icon: const Icon(Icons.send),
+            )
           ],
         ),
       ),
